@@ -254,7 +254,7 @@ def clip_boxes_graph(boxes, window):
     return clipped
 
 
-class ProposalLayer(KL.Layer):
+class ProposalLayer((KL.Layer)):
     """Receives anchor scores and selects a subset to pass as proposals
     to the second stage. Filtering is done based on anchor scores and
     non-max suppression to remove overlaps. It also applies bounding
@@ -343,7 +343,7 @@ def log2_graph(x):
     return tf.math.log(x) / tf.math.log(2.0)
 
 
-class PyramidROIAlign(KL):
+class PyramidROIAlign((KL.Layer)):
     """Implements ROI Pooling on multiple levels of the feature pyramid.
 
     Params:
@@ -621,7 +621,7 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
     return rois, roi_gt_class_ids, deltas, masks
 
 
-class DetectionTargetLayer(KL):
+class DetectionTargetLayer((KL.Layer)):
     """Subsamples proposals and generates target box refinement, class_ids,
     and masks for each.
 
@@ -771,7 +771,7 @@ def refine_detections_graph(rois, probs, deltas, window, config):
     # Coordinates are normalized.
     detections = tf.concat([
         tf.gather(refined_rois, keep),
-        tf.cast(tf.gather(class_ids, keep), np.float32)[..., tf.newaxis],
+        tf.cast(tf.gather(class_ids, keep), tf.float32)[..., tf.newaxis],
         tf.gather(class_scores, keep)[..., tf.newaxis]
         ], axis=1)
 
@@ -781,7 +781,7 @@ def refine_detections_graph(rois, probs, deltas, window, config):
     return detections
 
 
-class DetectionLayer(KL):
+class DetectionLayer((KL.Layer)):
     """Takes classified proposal boxes and their bounding box deltas and
     returns the final detection boxes.
 
@@ -2170,21 +2170,14 @@ class MaskRCNN():
             "mrcnn_class_loss", "mrcnn_bbox_loss", "mrcnn_mask_loss"]
         for name in loss_names:
             layer = self.keras_model.get_layer(name)
-            # print("AAAAAAAAA ", layer.output in self.keras_model.losses)
-            # print("AAAAAAAAAA ", tf.constant(layer.output in self.keras_model.losses))
-            # print(str(self.keras_model.losses))
-            # print(str(layer.output))
-            # print("AAAAAAAAAAAA ", str(layer.output) in str(self.keras_model.losses))
-            loss = tf.reduce_mean(layer.output, keepdims=True) * self.config.LOSS_WEIGHTS.get(name, 1.)
+#            loss = tf.reduce_mean(layer.output, keepdims=True) * self.config.LOSS_WEIGHTS.get(name, 1.)
+#            self.keras_model.add_loss(loss)
+#            if layer.output in self.keras_model.losses:
+#                continue
+            loss = (
+                tf.reduce_mean(layer.output, keepdims=True)
+                * self.config.LOSS_WEIGHTS.get(name, 1.))
             self.keras_model.add_loss(loss)
-            # tf.cond(tf.constant(layer.output in self.keras_model.losses), lambda: 1, lambda: self.keras_model.add_loss(tf.reduce_mean(layer.output, keepdims=True) * self.config.LOSS_WEIGHTS.get(name, 1.)))
-            # tf.cond(tf.constant(layer.output in self.keras_model.losses), lambda: 1, lambda: self.keras_model.add_loss(tf.reduce_mean(layer.output, keepdims=True) * self.config.LOSS_WEIGHTS.get(name, 1.)))
-            #if layer.output in self.keras_model.losses:
-            #    continue
-            #loss = (
-            #    tf.reduce_mean(layer.output, keepdims=True)
-            #    * self.config.LOSS_WEIGHTS.get(name, 1.))
-            # self.keras_model.add_loss(loss)
 
         # Add L2 Regularization
         # Skip gamma and beta weights of batch normalization layers.
@@ -2278,7 +2271,7 @@ class MaskRCNN():
         # Directory for training logs
 #        self.log_dir = os.path.join(self.model_dir, "{}{:%Y%m%dT%H%M}".format(
 #            self.config.NAME.lower(), now))
-        self.log_dir = "//logdir//train"
+        self.log_dir = "."
 
         # Path to save after each epoch. Include placeholders that get filled by Keras.
         self.checkpoint_path = os.path.join(self.log_dir, "mask_rcnn_{}_*epoch*.h5".format(
@@ -2527,17 +2520,11 @@ class MaskRCNN():
         # Duplicate across the batch dimension because Keras requires it
         # TODO: can this be optimized to avoid duplicating the anchors?
         anchors = np.broadcast_to(anchors, (self.config.BATCH_SIZE,) + anchors.shape)
-        # print("PPPPPPPPPPPP ", image_metas)
-        # print("QQQQQQQQQ ", anchors)
-        # np.save("image_metas.npy", image_metas)
-        # np.save("anchors.npy", anchors)
-        # np.save("molded_images.npy", molded_images)
 
         if verbose:
             log("molded_images", molded_images)
             log("image_metas", image_metas)
             log("anchors", anchors)
-
         # Run object detection
         detections, _, _, mrcnn_mask, _, _, _ =\
             self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
